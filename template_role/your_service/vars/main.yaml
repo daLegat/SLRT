@@ -1,0 +1,4 @@
+# vars/main.yaml
+# Defines specific variables that override defaults if provided.
+---
+your_service_config_path: /opt/your_service/config.yaml  # Same as default, can be changed by user

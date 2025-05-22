@@ -1,0 +1,29 @@
+server {
+    listen 80;
+    server_name slrtredirector.com;
+
+    set $redir 0;
+
+    # Condition 1: Check for user agent
+    if ($http_user_agent ~* "{{ redirector_user_agent }}") {
+        set $redir 1;
+    }
+
+    # Condition 2: Check for token
+    if ($arg_token = "{{ redirector_token }}") {
+        set $redir 1;
+    }
+
+    location / {
+        # Redirect to real C2 infra if one of the conditions is met
+        if ($redir = 1) {
+            return 302 {{ redirector_real_server }};
+            #return 302 https://{{ hostvars['sliver_backend']['ansible_host'] }}/; Use IP of Sliver directly from hostvars/ansible inventory
+            #return 302 https://www.orf.at/; # testing
+        }
+
+        # If no condition is met, show a legitimate website
+        root /var/www/html/templates;
+        index legit_site.html;
+    }
+}

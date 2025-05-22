@@ -1,0 +1,7 @@
+# templates/example_config.j2
+# This is a Jinja2 template file used for configuration generation.
+server:
+  host: "{{ ansible_host }}"  # Uses Ansible's built-in variable for the host
+  port: 8080  # Port for the service
+logging:
+  level: info  # Log level setting

@@ -1,0 +1,52 @@
+<VirtualHost *:443>
+    ServerName {{ root_domain }}
+
+    SSLEngine on
+    SSLProxyEngine on
+
+    SSLProxyVerify none
+    SSLProxyCheckPeerCN off
+    SSLProxyCheckPeerName off
+    
+    SSLCertificateFile /etc/ssl/certs/evilgophish.crt
+    SSLCertificateKeyFile /etc/ssl/private/evilgophish.key
+
+    ProxyPass / https://localhost:8080/
+    ProxyPassReverse / http://localhost:8080/
+</VirtualHost>
+
+{% for subdomain in subdomains.split() %}
+<VirtualHost *:443>
+    ServerName {{ subdomain }}.{{ root_domain }}
+
+    SSLEngine on
+    SSLProxyEngine on
+
+    SSLProxyVerify none
+    SSLProxyCheckPeerCN off
+    SSLProxyCheckPeerName off
+
+    SSLCertificateFile /etc/ssl/certs/evilgophish.crt
+    SSLCertificateKeyFile /etc/ssl/private/evilgophish.key
+
+    ProxyPass / http://localhost:8443/
+    ProxyPassReverse / http://localhost:8443/
+</VirtualHost>
+
+<VirtualHost *:3434>
+    ServerName admin.{{ root_domain }}
+
+    SSLEngine on
+    SSLProxyEngine on
+
+    SSLProxyVerify none
+    SSLProxyCheckPeerCN off
+    SSLProxyCheckPeerName off
+
+    SSLCertificateFile /etc/ssl/certs/evilgophish.crt
+    SSLCertificateKeyFile /etc/ssl/private/evilgophish.key
+
+    ProxyPass / https://localhost:3333/
+    ProxyPassReverse / https://localhost:8080/
+</VirtualHost>
+{% endfor %}

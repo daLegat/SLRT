@@ -1,0 +1,9 @@
+# defaults/main.yaml
+# Sets default variables that can be overridden when calling the role.
+---
+your_service_packages:
+  - nginx  # Web server
+  - curl  # Command-line tool for HTTP requests
+  - python3  # Python interpreter
+
+your_service_config_path: /opt/your_service/config.yaml  # Default configuration file location

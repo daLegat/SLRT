@@ -1,0 +1,22 @@
+<VirtualHost *:443>
+    ServerName {{ root_domain }}
+    SSLEngine on
+    SSLCertificateFile {{ ssl_cert_path }}
+    SSLCertificateFileKeyFile {{ ssl_key_path }}
+
+    ProxyPass / http://localhost:8080/
+    ProxyPassReverse / http://localhost:8080/
+</VirtualHost>
+
+{% for subdomain in subdomains.split() %}
+<VirtualHost *:443>
+    ServerName {{ subdomain }}.{{ root_domain }}
+
+    SSLEngine on
+    SSLCertificateFile {{ ssl_cert_path}}
+    SSLCertificateFileKeyFile {{ ssl_key_path }}
+
+    ProxyPass / http://localhost:8443/
+    ProxyPassReverse / http:localhost:8443/
+</VirtualHost>
+{% endfor %}

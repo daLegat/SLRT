@@ -1,0 +1,14 @@
+[Unit]
+Description=Gophish Phishing Framework
+After=network.target
+
+[Service]
+ExecStart=/opt/evilgophish/gophish/gophish
+Restart=always
+User=root
+StandardOutput=append:/tmp/gophish_output.log
+StandardError=append:/tmp/gophish_output.log
+WorkingDirectory=/opt/evilgophish/gophish
+
+[Install]
+WantedBy=multi-user.target

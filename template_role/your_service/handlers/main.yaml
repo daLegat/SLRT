@@ -1,0 +1,7 @@
+# handlers/main.yaml
+# Handlers are special tasks triggered by the "notify" directive in tasks.
+---
+- name: Restart your_service
+  service:
+    name: your_service  # The name of the service to restart
+    state: restarted  # Ensures the service is restarted when needed

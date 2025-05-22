@@ -1,0 +1,6 @@
+external_ip: "{{ hostvars[inventory_hostname].ansible_host }}"
+ghostwriter_repo_url: "https://github.com/GhostManager/Ghostwriter.git"
+ghostwriter_cli_version: "v5.0.6"
+ghostwriter_cli_url: "https://github.com/GhostManager/Ghostwriter_CLI/releases/download/{{ ghostwriter_cli_version }}/ghostwriter-cli-linux"
+ghostwriter_install_dir: "/opt/ghostwriter"
+ghostwriter_cli_path: "/usr/local/bin/ghostwriter-cli-linux"

@@ -1,0 +1,6 @@
+---
+- name: Deploy Sliver C2 Server
+  hosts: sliver_backend
+  become: yes
+  roles:
+    - sliver

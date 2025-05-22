@@ -1,0 +1,7 @@
+sliver_version_num: "1.5.42"
+operator_name: "wasp"
+sliver_lhost: "192.168.0.206"
+operator_config_file_loc: "/home/slrt/sliver.cfg"
+multiplayer_users:
+  - { name: "player01", config_path: "/opt/sliver/player01.cfg" }
+  - { name: "player02", config_path: "/opt/sliver/player02.cfg" }

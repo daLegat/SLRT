@@ -1,0 +1,6 @@
+---
+- name: Deploy EvilGophish Server
+  hosts: evilgophish_backend
+  become: yes
+  roles:
+    - evilgophish

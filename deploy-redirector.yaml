@@ -1,0 +1,6 @@
+---
+- name: Deploy Redirector Service mit Nginx
+  hosts: redirector
+  become: true
+  roles:
+    - redirector

@@ -1,0 +1,4 @@
+- name: Restart Ghostwriter Service
+  service:
+    name: ghostwriter
+    state: restarted

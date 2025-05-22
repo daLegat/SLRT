@@ -1,0 +1,59 @@
+- name: Update apt cache
+  apt:
+    update_cache: yes
+
+- name: Install required Python packages
+  apt:
+    name: 
+      - python3
+      - python3-pip
+      - python3-flask
+      - python3-waitress
+    state: present
+  become: yes
+
+- name: Create template directory
+  file:
+    path: "{{ install_dir }}/templates"
+    state: directory
+    mode: '0755'
+
+- name: Create payload directory
+  file:
+    path: "{{ install_dir }}/payloads"
+    state: directory
+    mode: '0755'
+
+- name: Copy the program to the remote
+  copy:
+    src: "files/"
+    dest: "{{ install_dir }}"
+
+- name: Copy the legitimate website
+  copy:
+    src: "templates/{{ index_template }}"
+    dest: "{{ install_dir }}/templates/index.html"
+
+- name: Copy the example payload to the remote
+  template:
+    src: "files/{{ payload_template }}"
+    dest: "{{ install_dir }}/payloads/{{ payload_template }}"
+
+- name: Create the Systemd service file to the remote
+  template:
+    src: "templates/{{ service_template }}"
+    dest: "/etc/systemd/system/{{ service_name }}.service"
+  notify: Restart VeilDrop
+
+- name: Enable and start VeilDrop service
+  systemd:
+    name: "{{ service_name }}"
+    enabled: yes
+    state: started
+
+- name: Check payload server is externally reachable
+  ansible.builtin.uri:
+    url: https://{{ ansible_host }}:8080
+    status_code: 200
+  delegate_to: localhost
+  tags: never

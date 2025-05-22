@@ -1,0 +1,17 @@
+# tasks/main.yaml
+# This file defines the tasks that Ansible will execute to configure your service.
+---
+- name: Install necessary packages
+  apt:
+    name: "{{ your_service_packages }}"  # Installs packages defined in variables
+    state: present  # Ensures they are installed
+  become: yes  # Runs with elevated privileges
+
+- name: Deploy configuration file
+  template:
+    src: example_config.j2  # Template file to use
+    dest: "{{ your_service_config_path }}"  # Destination path for config file
+    owner: root  # File ownership
+    group: root
+    mode: '0644'  # Read and write permissions
+  notify: Restart your_service  # Calls handler if this task changes anything

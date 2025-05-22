@@ -1,0 +1,12 @@
+[Unit]
+Description=Evilginx3 Reverse Proxy Framework
+After=network.target
+
+[Service]
+ExecStart=/opt/evilgophish/evilginx -feed -g /opt/evilgophish/gophish/gophish.db
+Restart=always
+User=root
+WorkingDirectory=/opt/evilgophish/evilginx
+
+[Install]
+WantedBy=multi-user.target

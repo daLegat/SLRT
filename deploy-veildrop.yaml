@@ -1,0 +1,6 @@
+---
+- name: Deploy VeilDrop Payload Server
+  hosts: veildrop_backend
+  become: yes
+  roles:
+    - veildrop

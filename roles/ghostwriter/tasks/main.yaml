@@ -1,0 +1,179 @@
+- name: Install gpg package
+  apt:
+    name: gpg
+    state: present
+  when: ansible_facts.os_family == 'Debian'
+
+
+- name: Add Docker's official GPG key
+  apt_key:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    state: present
+  when: ansible_facts.os_family == 'Debian'
+
+- name: Update apt cache
+  apt:
+    update_cache: yes
+  when: ansible_facts.os_family == 'Debian'
+
+# Add tasks for upgrading and installing curl here!!!
+
+- name: Set up the Docker repository
+  apt_repository:
+    repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+    state: present
+  when: ansible_facts.os_family == 'Debian'
+
+- name: Add Docker's official repository
+  yum_repository:
+    name: docker
+    description: Docker Repository
+    baseurl: https://download.docker.com/linux/centos/7/x86_64/stable
+    gpgcheck: yes
+    gpgkey: https://download.docker.com/linux/centos/gpg
+    enabled: yes
+  when: ansible_facts.os_family == 'RedHat'
+
+- name: Install Docker and Compose Plugin (Debian)
+  apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-compose-plugin
+    state: present
+  when: ansible_facts.os_family == 'Debian'
+
+- name: Install Docker and Compose Plugin (RedHat)
+  yum:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-compose-plugin
+    state: present
+  when: ansible_facts.os_family == 'RedHat'
+
+- name: Start Docker service
+  service:
+    name: docker
+    state: started
+    enabled: true
+
+- name: Verify Docker daemon is running
+  shell: |
+    systemctl is-active docker
+  register: docker_status
+  failed_when: docker_status.rc != 0
+  changed_when: false
+  ignore_errors: true
+
+- name: Restart Docker service if necessary
+  service:
+    name: docker
+    state: restarted
+  when: docker_status.rc != 0
+
+- name: Clone Ghostwriter repository
+  git:
+    repo: "{{ ghostwriter_repo_url }}"
+    dest: "{{ ghostwriter_install_dir }}"
+    force: yes #test
+
+- name: Ensure .env file exists
+  file:
+    path: "{{ ghostwriter_install_dir }}/.env"
+    state: touch
+    mode: "0644"
+
+- name: Add external IP to allowed hosts
+  lineinfile:
+    path: "{{ ghostwriter_install_dir }}/.env"
+    regexp: "^ALLOWED_HOSTS"
+    line: "ALLOWED_HOSTS=127.0.0.1,localhost,{{ external_ip }}"
+
+- name: Add wildcard to DJANGO_ALLOWED_HOSTS
+  lineinfile:
+    path: "{{ ghostwriter_install_dir }}/.env"
+    regexp: "^DJANGO_ALLOWED_HOSTS"
+    line: "DJANGO_ALLOWED_HOSTS=*"
+    state: present
+
+- name: Install Ghostwriter via CLI (mit Retry)
+  command: "{{ ghostwriter_install_dir }}/ghostwriter-cli-linux install"
+  args:
+    chdir: "{{ ghostwriter_install_dir }}"
+  register: ghostwriter_install_result
+  become: yes
+  retries: 3
+  delay: 10
+  until: ghostwriter_install_result.rc == 0
+
+
+- name: Install Ghostwriter via CLI script
+  command: "{{ ghostwriter_install_dir }}/ghostwriter-cli-linux install"
+  args:
+    chdir: "{{ ghostwriter_install_dir }}"
+  ignore_errors: true
+  become: yes
+  register: ghostwriter_install_result
+  tags: never
+
+- name: Retry Installation of Ghostwriter via CLI script
+  command: "{{ ghostwriter_install_dir }}/ghostwriter-cli-linux install"
+  args:
+    chdir: "{{ghostwriter_install_dir}}"
+  become: yes
+  when: ghostwriter_install_result.failed
+  tags: never
+
+
+- name: Restart all containers after installation
+  command: "{{ ghostwriter_install_dir }}/ghostwriter-cli-linux containers restart"
+  args:
+    chdir: "{{ ghostwriter_install_dir }}"
+  become: yes
+  tags:
+    - never
+
+- name: Get admin password from Ghostwriter host
+  shell: "./ghostwriter-cli-linux config get admin_password"
+  args:
+    chdir: "{{ ghostwriter_install_dir }}"
+  register: admin_password_result
+  become: yes
+
+- name: Get raw admin password from Ghostwriter host
+  shell: "ghostwriter-cli config get admin_password | tail -n 2"
+  args:
+    chdir: "{{ ghostwriter_install_dir }}"
+  register: admin_password_result
+  become: yes
+  tags:
+    - never
+
+- name: Ensure output directory exists
+  file:
+    path: "./output"
+    state: directory
+    mode: "0755"
+
+- name: Save admin password to a temporary file on the remote host
+  copy:
+    content: "{{ admin_password_result.stdout }}"
+    dest: "/tmp/admin_password.txt"
+    mode: "0644"
+  become: yes
+
+- name: Fetch the admin password to the local machine
+  fetch:
+    src: "/tmp/admin_password.txt"
+    dest: "./output/ghostwriter/admin_password.txt"
+    flat: yes
+
+- name: Check dashboard is externally reachable
+  ansible.builtin.uri:
+    url: https://{{ ansible_host }}
+    status_code: 200
+  delegate_to: localhost
+  tags: never

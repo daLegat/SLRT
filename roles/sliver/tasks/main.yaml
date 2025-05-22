@@ -1,0 +1,70 @@
+---
+- name: Update and upgrade apt packages
+  become: true
+  apt:
+    upgrade: yes
+    update_cache: yes
+
+- name: Install dependencies
+  apt:
+    name: mingw-w64
+    state: present
+    update_cache: yes
+
+- name: Create Sliver directory
+  file:
+    path: /opt/sliver
+    state: directory
+    mode: "0755"
+
+- name: Download Sliver binary
+  get_url:
+    url: "https://github.com/BishopFox/sliver/releases/download/v{{ sliver_version_num }}/sliver-server_linux"
+    dest: /opt/sliver/sliver
+    mode: "0755"
+
+- name: Generate operator config
+  command: "/opt/sliver/sliver operator -l {{ sliver_lhost}} -n {{ operator_name }} -s {{ operator_config_file_loc }}"
+  args:
+    creates: "{{ operator_config_file_loc }}"
+
+#- name: Start Sliver in interactive mode
+#  shell: "/opt/sliver/sliver && sleep 5; pkill sliver"
+
+- name: Create multiplayer users
+  shell: "/opt/sliver/sliver operator --name {{ item.name }}  --lhost {{ sliver_lhost }} --save {{ item.config_path }}"
+  loop: "{{ multiplayer_users }}"
+  args:
+    executable: /bin/bash
+
+- name: Copy generated player configs to local machine
+  fetch:
+    src: "{{ item.config_path }}"
+    dest: "./output/sliver/player_configs/{{ item.name }}.cfg"
+    flat: yes
+  loop: "{{ multiplayer_users }}"
+
+- name: Copy systemd service file
+  template:
+    src: sliver.service.j2
+    dest: /etc/systemd/system/sliver.service
+
+- name: Enable and start Sliver service
+  systemd:
+    name: sliver
+    state: started
+    enabled: true
+
+- name: Check c2 service is externally reachable
+  ansible.builtin.uri:
+    url: https://{{ ansible_host }}:8888
+    status_code: 200
+  delegate_to: localhost
+  tags: never
+
+- name: Check multiplayer server is externally reachable
+  ansible.builtin.uri:
+    url: https://{{ ansible_host }}:1337/
+    status_code: 200
+  delegate_to: localhost
+  tags: never

@@ -1,0 +1,12 @@
+[Unit]
+Description=VeilDrop Service
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory={{ install_dir }}
+ExecStart={{ python_bin }} {{ install_dir }}/veildrop.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

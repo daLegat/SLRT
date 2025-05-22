@@ -1,0 +1,35 @@
+all:
+  children:
+    redteam:
+      children:
+        sliver:
+          hosts:
+            sliver_backend
+        redirector:
+          hosts:
+            redirector_backend
+        evilgophish:
+          hosts:
+            evilgophish_backend
+        veildrop:
+          hosts:
+            veildrop_backend
+        ghostwriter:
+          hosts:
+            ghostwriter_backend
+
+  vars:
+    ansible_user: slrt
+    ansible_become: true
+
+  hosts:
+    sliver_backend:
+      ansible_host: 192.168.0.206
+    redirector_backend:
+      ansible_host: 192.168.0.205
+    evilgophish_backend:
+      ansible_host: 192.168.0.203
+    veildrop_backend:
+      ansible_host: 192.168.0.204
+    ghostwriter_backend:
+      ansible_host: 192.168.0.207

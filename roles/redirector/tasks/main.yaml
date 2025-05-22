@@ -1,0 +1,51 @@
+---
+- name: Install nginx
+  apt:
+    name: nginx
+    state: present
+    update_cache: true
+
+- name: Create directory for legitimate website
+  file:
+    path: /var/www/html/templates
+    state: directory
+    owner: www-data
+    group: www-data
+    mode: '0755'
+
+- name: Copy legitimate website
+  copy:
+    src: legit_site.html
+    dest: /var/www/html/templates/legit_site.html
+    owner: www-data
+    group: www-data
+    mode: '0644'
+
+- name: Deploy nginx configuration for redirector
+  template:
+    src: nginx_redirector.conf.j2
+    dest: /etc/nginx/sites-available/redirector.conf
+  notify: Reload nginx
+
+- name: Activate redirector site
+  file:
+    src: /etc/nginx/sites-available/redirector.conf
+    dest: /etc/nginx/sites-enabled/redirector.conf
+    state: link
+  notify: Reload nginx
+
+- name: Removal of default nginx site
+  file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: Reload nginx
+
+- name: Restart nginx service
+  systemd:
+    name: nginx
+    state: restarted
+    enabled: true
+
+#Testing Curl: curl -L http://192.168.0.205/?token=secretkey123
+#Testing Curl: curl -A "SpecialAgent" -L http://192.168.0.205/
+#Testing Curl: curl http://192.168.0.205/

@@ -1,0 +1,13 @@
+---
+# Real Red Team Infrastructure
+redirector_real_server: "https://real-redteam-infra.local"
+redirector_real_server_ip: "http://192.168.0.206"
+
+# Legitimate looking website
+redirector_fake_server: "https://legit-website.local"
+
+# Token for redirection
+redirector_token: "secretToken123"
+
+# User-Agent for Redirection
+redirector_user_agent: "SpecialAgent"

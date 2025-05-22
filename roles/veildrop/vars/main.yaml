@@ -1,0 +1,7 @@
+install_dir: "/opt/veildrop"
+service_name: "veildrop"
+python_bin: "/usr/bin/python3"
+service_template: "veildrop.service.j2"
+index_template: "index.html"
+payload_template: "payload.bin"
+secret_user_agent: "SpecialAgent"

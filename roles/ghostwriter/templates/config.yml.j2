@@ -1,0 +1,9 @@
+server:
+  listen: ":443"
+  tls:
+    cert: "{{ ghostwriter_cert_dir }}/cert.pem"
+    key: "{{ ghostwriter_cert_dir }}/key.pem"
+  allowed_hosts:
+    - "localhost"
+    - "127.0.0.1"
+    - "{{ external_ip }}"

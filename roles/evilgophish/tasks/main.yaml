@@ -1,0 +1,247 @@
+---
+- name: Update and upgrade apt packages
+  become: true
+  apt:
+    upgrade: yes
+    update_cache: yes
+
+- name: Install dependencies
+  apt:
+    name: ["apache2", "git", "certbot", "curl", "tmux"]
+    state: present
+    update_cache: yes
+  tags:
+    - always
+
+- name: Clone EvilGophish repo
+  git:
+    repo: "https://github.com/fin3ss3g0d/evilgophish.git"
+    dest: "/opt/evilgophish"
+    force: yes
+  tags:
+    - always
+
+- name: Set permissions for directory
+  file: 
+    path: "/opt/evilgophish"
+    mode: "0755"
+    recurse: yes
+  tags:
+    - always
+
+- name: Stop apache webserver
+  service:
+    name: apache2
+    state: stopped
+  tags:
+    - always
+
+- name: Generate SSl certs with Certbot
+  command: certbot certonly --standalone --non-interactive -d {{ root_domain }} -d www.{{ root_domain }} --agree-tos --email someone@smth.com
+  args:
+    creates: /etc/letsencrypt/live/{{ root_domain }}/fullchain.pem
+  tags:
+    - never
+
+- name: Generate self-signed SSL certificate (Test)
+  command: >
+    openssl req -x509 -nodes -days 365 -newkey rsa:2048
+    -keyout /etc/ssl/private/evilgophish.key
+    -out /etc/ssl/certs/evilgophish.crt
+    -subj "/C=US/ST=State/L=City/O=Organization/OU=IT/CN={{ root_domain }}"
+  args:
+    creates: /etc/ssl/certs/evilgophish.crt
+  tags:
+    - test
+
+- name: Run setup script
+  command: "./setup.sh {{ root_domain }} '{{ subdomains }}' false {{ use_live_feed }} user_id"
+  args:
+    chdir: /opt/evilgophish
+  tags:
+    - always
+
+- name: Configure Apache for reverse proxy (Test)
+  template:
+    src: apache_reverse_proxy_conf_test.j2
+    dest: /etc/apache2/sites-available/evilphish.com.conf
+  notify:
+    - Restart Apache
+  tags:
+    - test
+
+- name: Configure Apache for reverse proxy (Production)
+  template:
+    src: apache_reverse_proxy_conf_prod.j2
+    dest: /etc/apache2/sites-available/evilphish.com.conf
+  notify:
+    - Restart Apache
+  tags:
+    - never
+
+- name: Enable proxy
+  command: a2enmod proxy
+  tags:
+    - always
+
+- name: Enable proxy http
+  command: a2enmod proxy_http
+  tags:
+    - always
+
+- name: Enable SSLEngine
+  command: a2enmod ssl
+  tags:
+    - always
+
+- name: Enable Apache site
+  command: a2ensite evilphish.com.conf
+  notify: Restart Apache
+  tags:
+    - always
+
+- name: create Service for gophish
+  template:
+    src: gophish.service.j2
+    dest: /etc/systemd/system/gophish.service
+  tags:
+    - always
+
+- name: create Service for evilginx
+  template:
+    src: evilginx.service.j2
+    dest: /etc/systemd/system/evilginx.service
+  tags:
+    - always
+
+- name: Reload systemd daemon
+  command: systemctl daemon-reload
+  tags:
+    - always
+
+- name: Enable and start gophish service
+  systemd:
+    name: gophish
+    enabled: yes
+    state: started
+  tags:
+    - always
+
+- name: Ensure Apache listens on port 3434
+  lineinfile:
+    path: /etc/apache2/ports.conf
+    regexp: '^Listen 3434$'
+    line: 'Listen 3434'
+    state: present
+    insertafter: '^Listen 80$'
+  notify:
+    - Restart Apache
+  become: true
+  tags:
+    - always
+
+# Testing purposes
+- name: Start Gophish and capture output
+  shell: sudo ./gophish 2>&1 | grep "Please login with the username admin and the password" | awk -F'password ' '{print $2}' | tr -d '"' > /tmp/admin_password.txt
+  args:
+    chdir: /opt/evilgophish/gophish
+  register: gophish_output
+  async: 90
+  poll: 0
+  become: true
+  tags:
+    - never
+
+- name: Extract admin password from Gophish log
+  shell: grep "Please login with the username admin and the password" /tmp/gophish_output.log | awk -F'password ' '{print $2}' | tr -d '"'
+  register: admin_password
+  become: true
+  tags:
+    - always
+
+- name: Display admin password
+  debug:
+    msg: "Gophish Admin password is: {{ admin_password.stdout }}"
+  tags:
+    - always
+
+
+- name: Save extracted admin password to file
+  copy:
+    content: "{{ admin_password.stdout }}"
+    dest: /tmp/initial_admin_password.txt
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  tags:
+    - always
+
+- name: Fetch the admin password to the local machine
+  fetch:
+    src: /tmp/initial_admin_password.txt
+    dest: ./output/evilgophish/gophish_initial_admin.txt
+    flat: yes
+  tags:
+    - always
+
+# Testing purposes
+- name: Ensure admin password file exists
+  stat:
+    path: /tmp/admin_password.txt
+  register: admin_password_file
+  become: true
+  tags:
+    - never
+
+# Testing purposes
+- name: Fetch the admin password to the local machine
+  fetch:
+    src: "/tmp/admin_password.txt"
+    dest: "./output/evilgophish/gophish_admin.txt"
+    flat: yes
+  become: true
+  tags:
+    - never
+
+- name: Stop Gophish process
+  shell: sudo pkill -f ./gophish
+  ignore_errors: true
+  become: true
+  tags:
+    - always
+
+
+- name: Deploy Gophish config.json
+  template:
+    src: config.json.j2
+    dest: /opt/evilgophish/gophish/config.json
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0644"
+  tags:
+    - always
+
+- name: Enable and start evilginx service
+  systemd:
+    name: evilginx
+    enabled: yes
+    state: started
+  tags:
+    - always
+
+- name: Check phishing service is externally reachable
+  ansible.builtin.uri:
+    url: https://{{ ansible_host }}:8080
+    status_code: 200
+  delegate_to: localhost
+  tags: never
+
+- name: Check dahsboard is externally reachable
+  ansible.builtin.uri:
+    url: https://{{ ansible_host }}:3333/
+    status_code: 200
+  delegate_to: localhost
+  tags: never
+
+# ansible-playbook -i inventory.yaml deploy-evilgophish.yaml --tags test

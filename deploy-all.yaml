@@ -1,0 +1,26 @@
+- name: Deploy Ghostwriter
+  hosts: ghostwriter
+  roles:
+    - ghostwriter
+
+
+- name: Deploy Sliver
+  hosts: sliver
+  roles:
+    - sliver
+
+- name: Deploy Redirector
+  hosts: redirector
+  roles:
+    - redirector
+
+- name: Deploy EvilGophish
+  hosts: evilgophish
+  roles:
+    - evilgophish
+  tags: [test]
+
+- name: Deploy Veildrop
+  hosts: veildrop
+  roles:
+    - veildrop
