@@ -10,4 +10,4 @@ Currently, SLRT supports the following Red Teaming Components:
 - Ghostwriter Red Team Collaboration Tool
 - EvilGoPhish
 
-For instructions on how to get started, please use the following link to [get started](https://gitlab.fh-ooe.at/P41540/2024-streamlined-red-teaming-mpr3/-/wikis/Getting-Started)!
+For instructions on how to get started, please use the following link to [get started](https://github.com/daLegat/SLRT/wiki/Getting-Started)!
