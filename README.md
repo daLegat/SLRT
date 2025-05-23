@@ -11,3 +11,24 @@ Currently, SLRT supports the following Red Teaming Components:
 - EvilGoPhish
 
 For instructions on how to get started, please use the following link to [get started](https://github.com/daLegat/SLRT/wiki/Getting-Started)!
+
+## 🚧 Roadmap – Planned Features
+
+🧹 **Quality of life improvements**  
+Refactor and clean up the codebase for consistency across roles, playbooks, and directory structures to improve maintainability and readability.
+
+🧪 **Testing vs. Production scenarios**  
+Introduce separate environments for testing and production using Ansible tags. Example: use self-signed certificates for testing and Certbot-issued certificates for production deployments.
+
+🔗 **Interconnectivity between roles**  
+Improve integration between components (e.g., redirectors and C2 servers) to simplify and automate internal communication and configuration.
+
+🛠️ **Extend services with more red team tools**  
+Add additional roles and Ansible configurations for other red teaming tools to support a broader range of offensive capabilities.
+
+🖥️ **Web-based GUI for infrastructure management**  
+Develop a user-friendly interface to manage and control the infrastructure, including features like:
+- C2 user management
+- Payload uploads
+- Redirector rule configuration
+- Role-based controls per component
