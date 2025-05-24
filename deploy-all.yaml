@@ -3,7 +3,6 @@
   roles:
     - ghostwriter
 
-
 - name: Deploy Sliver
   hosts: sliver
   roles:
