@@ -30,7 +30,7 @@ resource "proxmox_virtual_environment_vm" "c2" {
   }
 
   disk {
-    datastore_id = "raid-10-node02"
+    datastore_id = "local-lvm"
     file_id      = "local:iso/jammy-server-cloudimg-amd64.img"
     interface    = "virtio0"
     iothread     = true
