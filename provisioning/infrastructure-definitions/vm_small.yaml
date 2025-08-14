@@ -1,0 +1,52 @@
+---
+- name: "node"
+  count: 3
+  node_name: "pve"
+  resource_name: "node"
+  vm_id: 1000
+  agent:
+    enabled: true
+    type: "virtio"
+  bios: "seabios"
+  ignore_changes:
+    - "disks"
+    - "cdrom"
+  cpu:
+    cores: 1
+    sockets: 1
+  cloud_init:
+    type: "nocloud"
+    interface: "ide0"
+    datastore_id: "local-lvm"
+    dns:
+      domain: ""
+      server: "1.1.1.1 8.8.8.8"
+    ip_configs:
+      - ipv4:
+          address: "192.168.90.50/32"
+          gateway: "192.168.90.1"
+    user_account:
+      username: "root"
+      keys:
+       - ssh-ed25519 REPLACEME
+
+  clone:
+    node_name: "pve"
+    vm_id: 999
+    full: true
+  disks:
+    - disk1:
+        interface: "scsi0"
+        datastore_id: "local-lvm"
+        size: 8
+        file_format: "raw"
+        cache: "none"
+  memory:
+    dedicated: 512
+  network_devices:
+    - net1:
+        bridge: "vmbr0"
+        model: "virtio"
+  on_boot: true
+
+

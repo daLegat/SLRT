@@ -1,0 +1,19 @@
+services:
+  db:
+    image: mariadb
+    environment:
+      - MYSQL_DATABASE=slrt
+      - MYSQL_USER=slrt
+      - MYSQL_ROOT_PASSWORD=fuv2 prnhw89zn20t
+      - MYSQL_PASSWORD=nqv9t80bm34tbqß34mßutnqv3t9q
+    ports:
+      - 1433:1433
+      - 1434:1434
+      - 3306:3306
+    volumes:
+      - ./dev/db:/var/lib/mysql
+  adminer:
+    image: adminer
+    restart: always
+    ports:
+      - 8080:8080
