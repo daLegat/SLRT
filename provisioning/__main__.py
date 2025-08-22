@@ -16,34 +16,8 @@ import mariadb
 import secrets
 from Crypto.PublicKey import RSA
 
-def setup():
-    # connect to SQL database
-    try:
-        conn = mariadb.connect(
-            user="slrt",
-            password="slrt",
-            host="127.0.0.1",
-            port=3306,
-            database="slrt"
-        )
-    except mariadb.Error as e:
-        print(f"Error connecting to MariaDB Platform: {e}")
-        sys.exit(1)
-        
-    cursor = conn.cursor()
-    
-    
-    sql_script = Path("./db_init.sql").read_text()
-    statements = [stmt.strip() for stmt in sql_script.split(';') if stmt.strip()]
 
-    for statement in statements:
-        cursor.execute(statement)
-        
-    # https://proxmoxer.github.io/docs/latest/authentication/
-    proxmox = ProxmoxAPI(conf.get('PVE','PVE_HOST'), user=conf.get('PVE','PVE_USER'), password=conf.get('PVE','PVE_PASS'), backend='ssh_paramiko')
-    
-
-def create_cloudinit(pve_id,cursor):
+def create_cloudinit(pve_id):
     """create a ubuntu cloudinit and save it as a template on the proxmox host
     """    
     # Get variables from config
@@ -108,7 +82,7 @@ def create_cloudinit(pve_id,cursor):
     proxmox.nodes(NODE).qemu(VM_ID).config.post(
         ciuser='ubuntu',
         cipassword='ubuntu',
-        ipconfig0='ip=dhcp'
+        ipconfig0='ip=static'
     )
     
     # Convert to template
@@ -175,10 +149,10 @@ def create_pve_VMs_from_template(vm_config):
             )
         )]
     
-    net = pulumi_pve.vm.VirtualMachineNetworkDeviceArgs(
+    net = [pulumi_pve.vm.VirtualMachineNetworkDeviceArgs(
             bridge=pve_config['vbridge'],
             model="virtio"
-        )
+        )]
     
     virtual_machine = pulumi_pve.vm.VirtualMachine(
         vm_id=vm_config['vmid'],
@@ -211,13 +185,13 @@ def create_pve_VMs_from_template(vm_config):
             interface="scsi0",
             dns=pulumi_pve.vm.VirtualMachineInitializationDnsArgs(
                 domain="",
-                servers=vm_config['DNS-server']
+                servers=[vm_config['DNS-server']]
             ),
             ip_configs=ip_configs,
             user_account=pulumi_pve.vm.VirtualMachineInitializationUserAccountArgs(
                 username=vm_username,
                 password=vm_password,
-                keys=vm_ssh_pubkey
+                keys=[vm_ssh_pubkey]
             ),
         ),
         on_boot=True,
@@ -240,3 +214,80 @@ def create_pve_VMs_from_template(vm_config):
     conn.commit()
     
     
+
+
+if __name__ == '__main__':
+    
+    
+    # Setup configparser
+    conf = configparser.ConfigParser()
+    conf.read('config.env')
+    
+    # Setup logparser
+    if not os.path.exists("logs"):
+        os.mkdir("logs")
+    logFormatter = logging.Formatter("%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
+    rootLogger = logging.getLogger()
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_filename = f"logs/log_{timestamp}.log"
+    fileHandler = logging.FileHandler(log_filename)
+    fileHandler.setFormatter(logFormatter)
+    rootLogger.addHandler(fileHandler)
+    consoleHandler = logging.StreamHandler()
+    consoleHandler.setFormatter(logFormatter)
+    rootLogger.addHandler(consoleHandler)
+
+    # Detect loglevel
+    if conf.get('PROVISIONER','LOGLEVEL') == 'info':
+        rootLogger.setLevel(logging.INFO)
+    elif conf.get('PROVISIONER','LOGLEVEL') == 'error':
+        rootLogger.setLevel(logging.INFO)
+    else:
+        rootLogger.setLevel(logging.DEBUG)
+
+
+
+    # connect to SQL database
+    try:
+        conn = mariadb.connect(
+            user="slrt",
+            password="slrt",
+            host="127.0.0.1",
+            port=3306,
+            database="slrt"
+        )
+    except mariadb.Error as e:
+        print(f"Error connecting to MariaDB Platform: {e}")
+        sys.exit(1)
+        
+    cursor = conn.cursor()
+    
+    
+    sql_script = Path("./db_init.sql").read_text()
+    statements = [stmt.strip() for stmt in sql_script.split(';') if stmt.strip()]
+
+    for statement in statements:
+        cursor.execute(statement)
+        
+    # https://proxmoxer.github.io/docs/latest/authentication/
+    proxmox = ProxmoxAPI(conf.get('PVE','PVE_HOST'), user=conf.get('PVE','PVE_USER'), password=conf.get('PVE','PVE_PASS'), backend='ssh_paramiko')
+    
+    
+    # setup pulumi provider
+    # TODO: use ssh instead of http
+    provider = pulumi_pve.Provider('proxmoxve',
+                            endpoint="https://" + conf.get('PVE','PVE_HOST') + ":8006",
+                            insecure=True,
+                            username=conf.get('PVE','PVE_USER') + "@pam",
+                            password=conf.get('PVE','PVE_PASS'),
+                            )
+    
+
+
+    # create cloudinit on pve with id 1
+    create_cloudinit(1)
+    
+    
+    config = get_pve_vm_config(100)
+ 
+    create_pve_VMs_from_template(config)
