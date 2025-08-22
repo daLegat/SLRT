@@ -5,30 +5,44 @@ import os
 from datetime import datetime
 import paramiko
 
+from pathlib import Path
+
 import pulumi
 import pulumi_proxmoxve as pulumi_pve
 import yaml
 
 import mariadb
-#import pandas
-#import sqlalchemy
 
+import secrets
+from Crypto.PublicKey import RSA
 
-def create_cloudinit():
+def create_cloudinit(pve_id):
+    """create a ubuntu cloudinit and save it as a template on the proxmox host
+    """    
     # Get variables from config
-    VM_ID = conf.get('PVE','PVE_TEMPLATE_ID')
+    pve_config = get_pve_config(pve_id)
+    
+    VM_ID = "9999"
     VM_NAME = "ubuntu-cloudinit-template"
-    NODE = conf.get('PVE','PVE_NODE')
-    ISO_STORAGE = conf.get('PVE','PVE_STORAGE_IMAGES')
-    VM_STORAGE = conf.get('PVE','PVE_STORAGE_VMS')
-    BRIDGE = conf.get('PVE','PVE_BRIDGE')
+
+    NODE = pve_config['name']
+    ISO_STORAGE = pve_config['datastore_ISO']
+    VM_STORAGE = pve_config['datastore_VMs']
+    BRIDGE = pve_config['vbridge']
     IMAGE_PATH = "/var/lib/vz/template/iso/noble-server-cloudimg-amd64.img"
     sourceURL = "https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img"
 
     # Download image to pve
     proxmox.nodes(NODE).storage(ISO_STORAGE)("download-url").post(url=sourceURL, content="iso", filename="noble-server-cloudimg-amd64.img")
 
-
+    try:
+        proxmox.nodes(NODE).qemu(VM_ID).config.get()
+    except:
+        rootLogger.info(f"VM-template {VM_ID} not found. Creating.")
+    else:
+        rootLogger.info(f"VM-template {VM_ID} already exists. Skipping creation.")
+        return
+    
     # Import the Disk
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -74,133 +88,133 @@ def create_cloudinit():
     proxmox.nodes(NODE).qemu(VM_ID).template.post()
 
 
-def load_yaml_files_from_folder(folder_path):
-    yaml_files = [file for file in os.listdir(folder_path) if file.endswith(".yaml")]
-    loaded_data = []
 
-    for yaml_file in yaml_files:
-        file_path = os.path.join(folder_path, yaml_file)
-        with open(file_path, 'r') as file:
-            yaml_data = yaml.safe_load(file)
-            loaded_data.append(yaml_data)
+def get_pve_vm_config(id):
+    """retrieve config data as a dict for a specific vm
 
-    return loaded_data
+    Args:
+        id (int): id of the desired vm
+
+    Returns:
+        dict: dict containing vm config
+    """    
+    config = {}
+    cursor.execute("SELECT * FROM pve_vms WHERE vmid=?",(id,))
+    vm_values = cursor.fetchall()[0]
+    cursor.execute("SHOW COLUMNS FROM slrt.pve_vms")
+    vm_keys = cursor.fetchall()
+    count = 0
+    for entry in vm_keys:
+        config[entry[0]] = vm_values[count]
+        count += 1
+    return config
 
 
-# TODO read from DB instead of yaml
-def create_VMs_from_templates(parsed_data):
-    for vm in parsed_data:
-        disks = []
-        nets = []
-        ip_configs = []
-        ssh_keys = []
+def get_pve_config(id):
+    config = {}
+    cursor.execute("SELECT * FROM pve_environment WHERE idenvironments=?",(id,))
+    vm_values = cursor.fetchall()[0]
+    cursor.execute("SHOW COLUMNS FROM slrt.pve_environment")
+    vm_keys = cursor.fetchall()
+    count = 0
+    for entry in vm_keys:
+        config[entry[0]] = vm_values[count]
+        count += 1
+    return config
+    
+    
+def create_pve_VMs_from_template(vm_config):
+    vm_password = secrets.token_urlsafe(32)
+    vm_username = secrets.token_urlsafe(32)
+    vm_ssh_key = RSA.generate(2048)
+    vm_ssh_pubkey = vm_ssh_key.publickey().export_key(format='OpenSSH').decode()
 
-        for v in vm:
-            for vmcount in range(v['count']):
-                base_resource_name=v['resource_name']
-                name_counter = vmcount + 1
-                base_vm_id=v['vm_id'],
-                for disk_entry in v['disks']:
-                    for d in disk_entry:
-                        disks.append(
-                            proxmox.vm.VirtualMachineDiskArgs(
-                                interface=disk_entry[d]['interface'],
-                                datastore_id=disk_entry[d]['datastore_id'],
-                                size=disk_entry[d]['size'],
-                                file_format=disk_entry[d]['file_format'],
-                                cache=disk_entry[d]['cache']
-                            )
-                        )
+    vm_ssh_key = vm_ssh_key.export_key(format='OpenSSH').decode()
+    
+    pve_config = get_pve_config(vm_config['environmentid'])
 
-                for ip_config_entry in v['cloud_init']['ip_configs']:
-                    ipv4 = ip_config_entry.get('ipv4')
+    disks = [pulumi_pve.vm.VirtualMachineDiskArgs(
+            interface="ide2",
+            datastore_id=pve_config['datastore_VMs'],
+            size=vm_config['Disksize'],
+            file_format="raw",
+            cache="none"
+        )]
 
-                    if ipv4:
-                        new_address = ''
-                        ip, subnet = ipv4.get('address', '').split('/')
-                        new_ip = str(ipaddress.ip_address(ip) + vmcount)
-                        new_address = f"{new_ip}/{subnet}"
+    ip_configs = [pulumi_pve.vm.VirtualMachineInitializationIpConfigArgs(
+            ipv4=pulumi_pve.vm.VirtualMachineInitializationIpConfigIpv4Args(
+                address=vm_config['IP_address'],
+                gateway=vm_config['Gateway']
+            )
+        )]
+    
+    net = pulumi_pve.vm.VirtualMachineNetworkDeviceArgs(
+            bridge=pve_config['vbridge'],
+            model="virtio"
+        )
+    
+    virtual_machine = pulumi_pve.vm.VirtualMachine(
+        vm_id=vm_config['vmid'],
+        resource_name=vm_config['name'],
+        node_name=pve_config['name'],
+        agent=pulumi_pve.vm.VirtualMachineAgentArgs(
+            enabled=True,
+            type="virtio"
+        ),
+        bios="seabios",
+        cpu=pulumi_pve.vm.VirtualMachineCpuArgs(
+            cores=vm_config['VCPUs'],
+            sockets="1"
+        ),
+        clone=pulumi_pve.vm.VirtualMachineCloneArgs(
+            node_name=pve_config['name'],
+            vm_id="9999",
+            full=True,
+        ),
+        disks=disks,
+        memory=pulumi_pve.vm.VirtualMachineMemoryArgs(
+            dedicated=vm_config['RAM']
+        ),
 
-                        ip_configs = []
-                        ip_configs.append(
-                            proxmox.vm.VirtualMachineInitializationIpConfigArgs(
-                                ipv4=proxmox.vm.VirtualMachineInitializationIpConfigIpv4Args(
-                                    address=new_address,
-                                    gateway=ipv4.get('gateway', '')
-                                )
-                            )
-                        )
-
-                for ssk_keys_entry in v['cloud_init']['user_account']['keys']:
-                    ssh_keys.append(ssk_keys_entry)
-
-                for net_entry in v['network_devices']:
-                    for n in net_entry:
-                        nets.append(
-                            proxmox.vm.VirtualMachineNetworkDeviceArgs(
-                                bridge=net_entry[n]['bridge'],
-                                model=net_entry[n]['model']
-                            )
-                        )
-
-                virtual_machine = proxmox.vm.VirtualMachine(
-                    vm_id=base_vm_id[0] + vmcount,
-                    resource_name=f"{base_resource_name}-{name_counter}",
-                    node_name=v['node_name'],
-                    agent=proxmox.vm.VirtualMachineAgentArgs(
-                        enabled=v['agent']['enabled'],
-                        # trim=v['agent']['trim'],
-                        type=v['agent']['type']
-                    ),
-                    bios=v['bios'],
-                    cpu=proxmox.vm.VirtualMachineCpuArgs(
-                        cores=v['cpu']['cores'],
-                        sockets=v['cpu']['sockets']
-                    ),
-                    clone=proxmox.vm.VirtualMachineCloneArgs(
-                        node_name=v['clone']['node_name'],
-                        vm_id=v['clone']['vm_id'],
-                        full=v['clone']['full'],
-                    ),
-                    disks=disks,
-                    memory=proxmox.vm.VirtualMachineMemoryArgs(
-                        dedicated=v['memory']['dedicated']
-                    ),
-                    name=f"{base_resource_name}-{name_counter}",
-                    network_devices=nets,
-                    initialization=proxmox.vm.VirtualMachineInitializationArgs(
-                        type=v['cloud_init']['type'],
-                        datastore_id=v['cloud_init']['datastore_id'],
-                        interface=v['cloud_init']['interface'],
-                        dns=proxmox.vm.VirtualMachineInitializationDnsArgs(
-                            domain=v['cloud_init']['dns']['domain'],
-                            server=v['cloud_init']['dns']['server']
-                        ),
-                        ip_configs=ip_configs,
-                        user_account=proxmox.vm.VirtualMachineInitializationUserAccountArgs(
-                            username=v['cloud_init']['user_account']['username'],
-                            password=os.getenv("PROXMOX_USER_ACCOUNT_PASSWORD"),
-                            keys=ssh_keys
-                        ),
-                    ),
-                    on_boot=v['on_boot'],
-                    reboot=v['on_boot'],
-                    opts=pulumi.ResourceOptions(provider=provider,ignore_changes=v['ignore_changes']),
-                )
-
-                pulumi.export(v['name'], virtual_machine.id)
+        name=pve_config['name'],
+        network_devices=net,
+        initialization=pulumi_pve.vm.VirtualMachineInitializationArgs(
+            type="nocloud",
+            datastore_id=pve_config['datastore_VMs'],
+            interface="scsi0",
+            dns=pulumi_pve.vm.VirtualMachineInitializationDnsArgs(
+                domain="",
+                servers=vm_config['DNS-server']
+            ),
+            ip_configs=ip_configs,
+            user_account=pulumi_pve.vm.VirtualMachineInitializationUserAccountArgs(
+                username=vm_username,
+                password=vm_password,
+                keys=vm_ssh_pubkey
+            ),
+        ),
+        on_boot=True,
+        reboot=True,
+        opts=pulumi.ResourceOptions(provider=provider,ignore_changes=("disks","cdrom")),
+    )
+    
+    # TODO: export and execute the pulumi vm
+    #pulumi.export('test', virtual_machine.id)
 
 
 
 
+    cursor.execute("SELECT * FROM pve_vms WHERE vmid = ?", (vm_config['vmid'],))
 
 
-
-
-
-
-
-
+    # save credentials to database
+    cursor.execute(
+    "UPDATE pve_vms SET ssh_key = ?, username = ?, password = ? WHERE vmid = ?",(vm_ssh_key, vm_username, vm_password, int(vm_config['vmid'])))
+    conn.commit()
+    
+    
+    
+    
 if __name__ == '__main__':
     # Setup configparser
     conf = configparser.ConfigParser()
@@ -230,38 +244,44 @@ if __name__ == '__main__':
 
 
     # connect to SQL database
-    # TODO: test setup, use different user for connection
     try:
         conn = mariadb.connect(
             user="slrt",
-            password="nqv9t80bm34tbqß34mßutnqv3t9q",
+            password="slrt",
             host="127.0.0.1",
             port=3306,
             database="slrt"
-
         )
     except mariadb.Error as e:
         print(f"Error connecting to MariaDB Platform: {e}")
         sys.exit(1)
     cursor = conn.cursor()
+    
+    
+    sql_script = Path("./db_init.sql").read_text()
+    statements = [stmt.strip() for stmt in sql_script.split(';') if stmt.strip()]
 
+    for statement in statements:
+        cursor.execute(statement)
+        
     # https://proxmoxer.github.io/docs/latest/authentication/
     proxmox = ProxmoxAPI(conf.get('PVE','PVE_HOST'), user=conf.get('PVE','PVE_USER'), password=conf.get('PVE','PVE_PASS'), backend='ssh_paramiko')
     
-    
     # setup pulumi provider
+    # TODO: use ssh instead of http
     provider = pulumi_pve.Provider('proxmoxve',
                             endpoint="https://" + conf.get('PVE','PVE_HOST') + ":8006",
-                            insecure=true,
+                            insecure=True,
                             username=conf.get('PVE','PVE_USER'),
                             password=conf.get('PVE','PVE_PASS'),
                             )
     
-    # create cloudinit on pve
-    create_cloudinit()
+
+    # create cloudinit on pve with id 1
+    create_cloudinit(1)
     
-    # read data from yaml files
-    parsed_data = load_yaml_files_from_folder("infrastructure-definitions/")
     
-    # create vms from parsed data
-    create_VMs_from_templates(parsed_data)
+    config = get_pve_vm_config(1)
+    
+    print(config)
+    create_pve_VMs_from_template(config)

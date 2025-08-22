@@ -4,8 +4,8 @@ services:
     environment:
       - MYSQL_DATABASE=slrt
       - MYSQL_USER=slrt
-      - MYSQL_ROOT_PASSWORD=fuv2 prnhw89zn20t
-      - MYSQL_PASSWORD=nqv9t80bm34tbqß34mßutnqv3t9q
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_PASSWORD=slrt
     ports:
       - 1433:1433
       - 1434:1434
