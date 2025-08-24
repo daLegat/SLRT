@@ -18,14 +18,13 @@ from Crypto.PublicKey import RSA
 
 
 def create_cloudinit(pve_id):
+    #TODO: rewrite with pulumi
     """create a ubuntu cloudinit and save it as a template on the proxmox host
     """    
     # Get variables from config
     pve_config = get_pve_config(pve_id)
-    
     VM_ID = "9999"
     VM_NAME = "ubuntu-cloudinit-template"
-
     NODE = pve_config['name']
     ISO_STORAGE = pve_config['datastore_ISO']
     VM_STORAGE = pve_config['datastore_VMs']
@@ -35,7 +34,6 @@ def create_cloudinit(pve_id):
 
     # Download image to pve
     proxmox.nodes(NODE).storage(ISO_STORAGE)("download-url").post(url=sourceURL, content="iso", filename="noble-server-cloudimg-amd64.img")
-
     try:
         proxmox.nodes(NODE).qemu(VM_ID).config.get()
     except:
@@ -43,7 +41,18 @@ def create_cloudinit(pve_id):
     else:
         rootLogger.info(f"VM-template {VM_ID} already exists. Skipping creation.")
         return
+
     
+    # Create the VM
+    proxmox.nodes(NODE).qemu.post(
+        vmid=VM_ID,
+        name=VM_NAME,
+        memory=512,
+        cores=1,
+        net0=f"virtio,bridge={BRIDGE}"
+    )
+    
+    # TODO: import disk via proxmoxer
     # Import the Disk
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -52,39 +61,47 @@ def create_cloudinit(pve_id):
     ssh.exec_command(command)
     ssh.close()
     
-    # Create the VM
-    proxmox.nodes(NODE).qemu.post(
-        vmid=VM_ID,
-        name=VM_NAME,
-        memory=2048,
-        cores=2,
-        sockets=1,
-        net0=f"virtio,bridge={BRIDGE}",
-        ostype='l26',
-        scsihw='virtio-scsi-pci'
-    )
-
-    # Attach imported disk to VM
+    
     proxmox.nodes(NODE).qemu(VM_ID).config.post(
-        scsi0=f"{VM_STORAGE}:vm-{VM_ID}-disk-0"
+        scsihw='virtio-scsi-pci',
+        scsi0=f"{VM_STORAGE}:vm-{VM_ID}-disk-0",
+        boot='c',
+        bootdisk='scsi0'
     )
-
+ 
+    
     # Add cloud-init drive
     proxmox.nodes(NODE).qemu(VM_ID).config.post(
-        ide2=f"{VM_STORAGE}:cloudinit",
-        boot='c',
-        bootdisk='scsi0',
+        ide2=f"{VM_STORAGE}:cloudinit"
+    )
+        
+    proxmox.nodes(NODE).qemu(VM_ID).config.post(
         serial0='socket',
         vga='serial0'
     )
 
-    # Set cloud-init config
     proxmox.nodes(NODE).qemu(VM_ID).config.post(
-        ciuser='ubuntu',
-        cipassword='ubuntu',
-        ipconfig0='ip=static'
+        agent='enabled=1'
     )
+
+
+   
+
+    # Set cloud-init config
+    #proxmox.nodes(NODE).qemu(VM_ID).config.post(
+    #    ciuser='ubuntu',
+    #    cipassword='ubuntu',
+    #    ipconfig0='ip=dhcp'
+    #)
     
+    
+    # BUG:
+    # 
+    # Storage 'local-lvm' on node 'pve'
+    # TASK ERROR: lvrename 'pve/vm-9999-disk-0' => 'pve/base-9999-disk-0' error:   Existing logical volume "vm-9999-disk-0" not found in volume group "pve"
+    
+    
+
     # Convert to template
     proxmox.nodes(NODE).qemu(VM_ID).template.post()
 
@@ -135,7 +152,7 @@ def create_pve_VMs_from_template(vm_config):
     pve_config = get_pve_config(vm_config['environmentid'])
 
     disks = [pulumi_pve.vm.VirtualMachineDiskArgs(
-            interface="ide2",
+            interface="scsi0",
             datastore_id=pve_config['datastore_VMs'],
             size=vm_config['Disksize'],
             file_format="raw",
@@ -144,7 +161,7 @@ def create_pve_VMs_from_template(vm_config):
 
     ip_configs = [pulumi_pve.vm.VirtualMachineInitializationIpConfigArgs(
             ipv4=pulumi_pve.vm.VirtualMachineInitializationIpConfigIpv4Args(
-                address=vm_config['IP_address'],
+                address=vm_config['IP_address']+"/"+str(vm_config['CIDR']),
                 gateway=vm_config['Gateway']
             )
         )]
@@ -177,12 +194,13 @@ def create_pve_VMs_from_template(vm_config):
             dedicated=vm_config['RAM']
         ),
 
-        name=pve_config['name'],
+        name=vm_config['name'],
         network_devices=net,
+        boot_orders=["scsi0"],  
         initialization=pulumi_pve.vm.VirtualMachineInitializationArgs(
             type="nocloud",
             datastore_id=pve_config['datastore_VMs'],
-            interface="scsi0",
+            interface="ide2",
             dns=pulumi_pve.vm.VirtualMachineInitializationDnsArgs(
                 domain="",
                 servers=[vm_config['DNS-server']]
@@ -199,7 +217,6 @@ def create_pve_VMs_from_template(vm_config):
         opts=pulumi.ResourceOptions(provider=provider,ignore_changes=("disks","cdrom")),
     )
     
-    # TODO: export and execute the pulumi vm
     pulumi.export('provisioning', virtual_machine.id)
 
 
@@ -268,6 +285,7 @@ if __name__ == '__main__':
 
     for statement in statements:
         cursor.execute(statement)
+    
         
     # https://proxmoxer.github.io/docs/latest/authentication/
     proxmox = ProxmoxAPI(conf.get('PVE','PVE_HOST'), user=conf.get('PVE','PVE_USER'), password=conf.get('PVE','PVE_PASS'), backend='ssh_paramiko')
@@ -284,10 +302,10 @@ if __name__ == '__main__':
     
 
 
-    # create cloudinit on pve with id 1
+    #create cloudinit on pve with id 1
     create_cloudinit(1)
     
     
     config = get_pve_vm_config(100)
- 
+
     create_pve_VMs_from_template(config)
